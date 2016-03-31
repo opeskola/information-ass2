@@ -9,7 +9,12 @@
  * 
  */
 
+import ir_course.DocumentCollectionParser;
+import ir_course.DocumentInCollection;
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.analysis.util.CharArraySet;
 import org.apache.lucene.document.*;
 import org.apache.lucene.index.*;
 import org.apache.lucene.search.*;
@@ -25,22 +30,27 @@ public class LuceneSearchApp {
 
 	private Directory luceneIndex;
 
-	public LuceneSearchApp() {
+	public LuceneSearchApp() {}
 
-	}
-	
-	public void index(List<RssFeedDocument> docs) throws IOException {
+	// VSM (lucene default) with Porter stemmer and stop words
+	// VSM (lucene default) with Porter stemmer and no stop words
+	// BM25 with Porter stemmer and stop words
+	// BM25 with Porter stemmer and no stop words
+	// VSM (lucene default) with some other stemmer and stop words
+	// VSM (lucene default) with some other stemmer and no stop words
+
+	public void index(List<DocumentInCollection> docs, Analyzer analyzer) throws IOException {
 
 		// using an in-memory index
-		StandardAnalyzer analyzer = new StandardAnalyzer();
 		luceneIndex = new RAMDirectory();
 		IndexWriterConfig config = new IndexWriterConfig(analyzer);
 		IndexWriter w = new IndexWriter(luceneIndex, config);
-		for (RssFeedDocument rssFeedDocument: docs) {
+
+		for (DocumentInCollection doc : docs) {
 			Document luceneDocument = new Document();
-			luceneDocument.add(new TextField("title", rssFeedDocument.getTitle(), Field.Store.YES));
-			luceneDocument.add(new TextField("description", rssFeedDocument.getDescription(), Field.Store.YES));
-			luceneDocument.add(new LongField("publish_date", rssFeedDocument.getPubDate().getTime(), Field.Store.YES));
+			luceneDocument.add(new TextField("title", doc.getTitle(), Field.Store.YES));
+			luceneDocument.add(new TextField("abstract", doc.getAbstractText(), Field.Store.YES));
+			//luceneDocument.add(new LongField("publish_date", doc.getPubDate().getTime(), Field.Store.YES));
 			w.addDocument(luceneDocument);
 		}
 		w.close();
@@ -198,64 +208,56 @@ public class LuceneSearchApp {
 		if (args.length > 0) {
 			LuceneSearchApp engine = new LuceneSearchApp();
 			
-			//RssFeedParser parser = new RssFeedParser();
-			//parser.parse(args[0]);
-			//List<RssFeedDocument> docs = parser.getDocuments();
-			List<String> docs = new ArrayList<>();
+			DocumentCollectionParser parser = new DocumentCollectionParser();
+			parser.parse(args[0]);
+			List<DocumentInCollection> docs = parser.getDocuments();
 
-			engine.index(docs);
+			List<String> queries = Arrays.asList("motion tracking", "gesture user interface", "motion detection user interface");
+			Analyzer analyzer;
+			switch(Integer.valueOf(args[1])) {
+				case 1:
+					// VSM (lucene default) with Porter stemmer and stop words
+					//analyzer = new PorterAnalyzer();
+					analyzer = new EnglishAnalyzer();
+					engine.index(docs, analyzer);
+					break;
+				case 2:
+					// VSM (lucene default) with Porter stemmer and no stop words
+					analyzer = new EnglishAnalyzer(CharArraySet.EMPTY_SET);
+					engine.index(docs, analyzer);
+					break;
+				case 3:
+					// BM25 with Porter stemmer and stop words
+					analyzer = new EnglishAnalyzer();
+					engine.index(docs, analyzer);
+					break;
+				case 4:
+					// BM25 with Porter stemmer and no stop words
+					analyzer = new EnglishAnalyzer(CharArraySet.EMPTY_SET);
+					engine.index(docs, analyzer);
+					break;
+				case 5:
+					// VSM (lucene default) with some other stemmer and stop words
+					analyzer = new StandardAnalyzer();
+					engine.index(docs, analyzer);
+					break;
+				case 6:
+					// VSM (lucene default) with some other stemmer and no stop words
+					analyzer = new StandardAnalyzer(CharArraySet.EMPTY_SET);
+					engine.index(docs, analyzer);
+					break;
+				case 7:
+					// VSM (lucene default) with no stemming and stop words
+					analyzer = new StandardAnalyzer();
+					engine.index(docs, analyzer);
+					break;
+				default:
+					System.out.println("Indexing option was missing");
+			}
 
-			List<String> inTitle;
-			List<String> notInTitle;
-			List<String> inDescription;
-			List<String> notInDescription;
-			List<String> results;
-			
-			// 1) search documents with words "kim" and "korea" in the title
-			inTitle = new LinkedList<String>();
-			inTitle.add("kim");
-			inTitle.add("korea");
-			results = engine.search(inTitle, null, null, null, null, null);
-			engine.printResults(results);
-			
-			// 2) search documents with word "kim" in the title and no word "korea" in the description
-			inTitle = new LinkedList<String>();
-			notInDescription = new LinkedList<String>();
-			inTitle.add("kim");
-			notInDescription.add("korea");
-			results = engine.search(inTitle, null, null, notInDescription, null, null);
-			engine.printResults(results);
 
-			// 3) search documents with word "us" in the title, no word "dawn" in the title and word "" and "" in the description
-			inTitle = new LinkedList<String>();
-			inTitle.add("us");
-			notInTitle = new LinkedList<String>();
-			notInTitle.add("dawn");
-			inDescription = new LinkedList<String>();
-			inDescription.add("american");
-			inDescription.add("confession");
-			results = engine.search(inTitle, notInTitle, inDescription, null, null, null);
-			engine.printResults(results);
-			
-			// 4) search documents whose publication date is 2011-12-18
-			results = engine.search(null, null, null, null, "2011-12-18", "2011-12-18");
-			engine.printResults(results);
-			
-			// 5) search documents with word "video" in the title whose publication date is 2000-01-01 or later
-			inTitle = new LinkedList<String>();
-			inTitle.add("video");
-			results = engine.search(inTitle, null, null, null, "2000-01-01", null);
-			engine.printResults(results);
-			
-			// 6) search documents with no word "canada" or "iraq" or "israel" in the description whose publication date is 2011-12-18 or earlier
-			notInDescription = new LinkedList<String>();
-			notInDescription.add("canada");
-			notInDescription.add("iraq");
-			notInDescription.add("israel");
-			results = engine.search(null, null, null, notInDescription, null, "2011-12-18");
-			engine.printResults(results);
 		}
 		else
-			System.out.println("ERROR: the path of a RSS Feed file has to be passed as a command line argument.");
+			System.out.println("ERROR: the path of a Document file has to be passed as a command line argument.");
 	}
 }
