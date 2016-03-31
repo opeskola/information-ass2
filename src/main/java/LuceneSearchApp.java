@@ -198,10 +198,11 @@ public class LuceneSearchApp {
 		if (args.length > 0) {
 			LuceneSearchApp engine = new LuceneSearchApp();
 			
-			RssFeedParser parser = new RssFeedParser();
-			parser.parse(args[0]);
-			List<RssFeedDocument> docs = parser.getDocuments();
-			
+			//RssFeedParser parser = new RssFeedParser();
+			//parser.parse(args[0]);
+			//List<RssFeedDocument> docs = parser.getDocuments();
+			List<String> docs = new ArrayList<>();
+
 			engine.index(docs);
 
 			List<String> inTitle;
