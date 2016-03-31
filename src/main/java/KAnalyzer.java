@@ -1,22 +1,22 @@
 import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.en.PorterStemFilter;
+import org.apache.lucene.analysis.en.KStemFilter;
 import org.apache.lucene.analysis.standard.StandardTokenizer;
 import org.apache.lucene.analysis.util.CharArraySet;
 import org.apache.lucene.analysis.util.StopwordAnalyzerBase;
 
-class PorterAnalyzer extends StopwordAnalyzerBase {
+public class KAnalyzer extends StopwordAnalyzerBase {
 
-    PorterAnalyzer() {
+    KAnalyzer() {
         super();
     }
 
-    PorterAnalyzer(CharArraySet set) {
+    KAnalyzer(CharArraySet set) {
         super(set);
     }
 
     @Override
     protected TokenStreamComponents createComponents(String fieldName) {
-        Tokenizer source = new StandardTokenizer(); //new LowerCaseTokenizer();
-        return new TokenStreamComponents(source, new PorterStemFilter(source));
+        Tokenizer source = new StandardTokenizer();
+        return new TokenStreamComponents(source, new KStemFilter(source));
     }
 }

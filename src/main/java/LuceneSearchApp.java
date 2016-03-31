@@ -12,13 +12,13 @@
 import ir_course.DocumentCollectionParser;
 import ir_course.DocumentInCollection;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.analysis.util.CharArraySet;
 import org.apache.lucene.document.*;
 import org.apache.lucene.index.*;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.search.*;
+import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.queryparser.classic.QueryParser;
@@ -33,13 +33,6 @@ public class LuceneSearchApp {
 
 	public LuceneSearchApp() {}
 
-	// VSM (lucene default) with Porter stemmer and stop words
-	// VSM (lucene default) with Porter stemmer and no stop words
-	// BM25 with Porter stemmer and stop words
-	// BM25 with Porter stemmer and no stop words
-	// VSM (lucene default) with some other stemmer and stop words
-	// VSM (lucene default) with some other stemmer and no stop words
-
 	public void index(List<DocumentInCollection> docs, Analyzer analyzer) throws IOException {
 
 		// using an in-memory index
@@ -50,7 +43,7 @@ public class LuceneSearchApp {
 		for (DocumentInCollection doc : docs) {
 			if (doc.getSearchTaskNumber() == 1) {
 				Document luceneDocument = new Document();
-				//luceneDocument.add(new TextField("title", doc.getTitle(), Field.Store.YES));
+				luceneDocument.add(new TextField("title", doc.getTitle(), Field.Store.YES));
 				luceneDocument.add(new TextField("abstract", doc.getAbstractText(), Field.Store.YES));
 				luceneDocument.add(new IntField("relevance", doc.isRelevant() ? 1 : 0, Field.Store.YES));
 				w.addDocument(luceneDocument);
@@ -59,46 +52,33 @@ public class LuceneSearchApp {
 		w.close();
 	}
 	
-	public List<String> search(String words, Analyzer analyzer) throws IOException, ParseException {
+	public List<String> search(String words, Analyzer analyzer, boolean BMSearcher) throws IOException, ParseException {
 		
 		System.out.println("query: " + words);
-		List<String> results = new LinkedList<String>();
+		List<String> results = new ArrayList<String>();
 
 		QueryParser parser = new QueryParser("abstract", analyzer);
 		Query query = parser.parse(words);
 
-		/*
-		BooleanQuery.Builder queryBuilder = new BooleanQuery.Builder();
-		for (String word: words) {
-			queryBuilder.add(new TermQuery(new Term("abstract", word)), BooleanClause.Occur.SHOULD);
-		}
-		BooleanQuery query = queryBuilder.build();
-		*/
-
 		IndexReader reader = DirectoryReader.open(luceneIndex);
 		IndexSearcher searcher = new IndexSearcher(reader);
+		if (BMSearcher) {
+			searcher.setSimilarity(new BM25Similarity());
+		}
 		TopDocs docs = searcher.search(query, reader.numDocs());
-
 		for (ScoreDoc hit: docs.scoreDocs) {
 			Document doc = searcher.doc(hit.doc);
 			IndexableField abstr = doc.getField("abstract");
-			results.add(abstr.stringValue());
+			IndexableField relevance = doc.getField("relevance");
+			IndexableField title = doc.getField("title");
+			results.add("Relevance: " + relevance.stringValue() +"; Score: " + hit.score +  "; Title: " + title.stringValue());
 		}
 
 		return results;
 	}
-
-	private BooleanQuery createBooleanQuery(String fieldName, List<String> tokens, BooleanClause.Occur clause) {
-		BooleanQuery.Builder queryBuilder = new BooleanQuery.Builder();
-		for (String token: tokens) {
-			queryBuilder.add(new TermQuery(new Term(fieldName, token)), clause);
-		}
-		return queryBuilder.build();
-	}
 	
 	public void printResults(List<String> results) {
 		if (results.size() > 0) {
-			Collections.sort(results);
 			for (int i=0; i<results.size(); i++)
 				System.out.println(" " + (i+1) + ". " + results.get(i));
 		}
@@ -114,38 +94,41 @@ public class LuceneSearchApp {
 			parser.parse(args[0]);
 			List<DocumentInCollection> docs = parser.getDocuments();
 
-			List<String> queries = Arrays.asList("motion tracking", "gesture user interface", "motion detection user interface");
+			List<String> queries = Arrays.asList("motion AND tracking", "gesture AND user AND interface",
+					"motion AND detection AND user AND interface", "motion AND control AND human AND computer AND interaction");
 			Analyzer analyzer = null;
+			boolean BMSearcher = false;
 			switch(Integer.valueOf(args[1])) {
 				case 1:
 					// VSM (lucene default) with Porter stemmer and stop words
 					analyzer = new PorterAnalyzer();
-					//analyzer = new EnglishAnalyzer();
 					engine.index(docs, analyzer);
 					break;
 				case 2:
 					// VSM (lucene default) with Porter stemmer and no stop words
-					analyzer = new EnglishAnalyzer(CharArraySet.EMPTY_SET);
+					analyzer = new PorterAnalyzer(CharArraySet.EMPTY_SET);
 					engine.index(docs, analyzer);
 					break;
 				case 3:
 					// BM25 with Porter stemmer and stop words
-					analyzer = new EnglishAnalyzer();
+					analyzer = new PorterAnalyzer();
 					engine.index(docs, analyzer);
+					BMSearcher = true;
 					break;
 				case 4:
 					// BM25 with Porter stemmer and no stop words
-					analyzer = new EnglishAnalyzer(CharArraySet.EMPTY_SET);
+					analyzer = new PorterAnalyzer(CharArraySet.EMPTY_SET);
 					engine.index(docs, analyzer);
+					BMSearcher = true;
 					break;
 				case 5:
-					// VSM (lucene default) with some other stemmer and stop words
-					analyzer = new StandardAnalyzer();
+					// VSM (lucene default) with K stemmer and stop words
+					analyzer = new KAnalyzer();
 					engine.index(docs, analyzer);
 					break;
 				case 6:
-					// VSM (lucene default) with some other stemmer and no stop words
-					analyzer = new StandardAnalyzer(CharArraySet.EMPTY_SET);
+					// VSM (lucene default) with K stemmer and no stop words
+					analyzer = new KAnalyzer(CharArraySet.EMPTY_SET);
 					engine.index(docs, analyzer);
 					break;
 				case 7:
@@ -157,11 +140,8 @@ public class LuceneSearchApp {
 					System.out.println("Indexing option was missing");
 					break;
 			}
-			Random random = new Random();
-			//List<String> queryWords = Arrays.asList(queries.get(random.nextInt(3)).split(" "));
-			List<String> queryWords = Arrays.asList("gesture", "user", "interface");
-			//List<String> queryWords = Arrays.asList("human", "interface");
-			List<String> results = engine.search("gesture AND user AND interface", analyzer);
+
+			List<String> results = engine.search("motion AND tracking", analyzer, BMSearcher);
 			engine.printResults(results);
 		}
 		else
